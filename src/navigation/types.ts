@@ -5,6 +5,7 @@ export type RootStackParamList = {
   Log: undefined;
   Stats: undefined;
   Workouts: undefined;
+  Jayson: undefined;
   Attributes: undefined;
   Profile: undefined;
   StreakDebug: undefined;

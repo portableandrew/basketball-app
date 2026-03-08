@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "bucket-tracker",
+    "name": "Bucket Tracker",
     "slug": "bucket-tracker",
     "version": "1.0.0",
+    "description": "Track basketball shooting workouts, streaks, and progression.",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -27,7 +28,13 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png",
+      "name": "Bucket Tracker",
+      "shortName": "BucketTracker",
+      "themeColor": "#39FF14",
+      "backgroundColor": "#0B0F14"
     },
     "extra": {
       "eas": {

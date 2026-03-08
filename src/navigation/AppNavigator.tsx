@@ -12,6 +12,7 @@ import { WorkoutDetailScreen } from "../screens/WorkoutDetailScreen";
 import { LogWorkoutScreen } from "../screens/LogWorkoutScreen";
 import { AttributesScreen } from "../screens/AttributesScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
+import { JaysonScreen } from "../screens/JaysonScreen";
 import { StreakDebugScreen } from "../screens/StreakDebugScreen";
 // ShopScreen disabled - cosmetics feature temporarily disabled
 import { RootStackParamList, HomeStackParamList, WorkoutStackParamList } from "./types";
@@ -85,6 +86,8 @@ export function AppNavigator() {
               iconName = focused ? "bar-chart" : "bar-chart-outline";
             } else if (route.name === "Workouts") {
               iconName = focused ? "basketball" : "basketball-outline";
+            } else if (route.name === "Jayson") {
+              iconName = focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline";
             } else if (route.name === "Attributes") {
               iconName = focused ? "stats-chart" : "stats-chart-outline";
             } else if (route.name === "Profile") {
@@ -156,6 +159,14 @@ export function AppNavigator() {
           options={{
             tabBarLabel: "Workouts",
             headerShown: false,
+          }}
+        />
+        <Tab.Screen
+          name="Jayson"
+          component={JaysonScreen}
+          options={{
+            tabBarLabel: "Jayson",
+            headerTitle: "Jayson Coach",
           }}
         />
         <Tab.Screen
