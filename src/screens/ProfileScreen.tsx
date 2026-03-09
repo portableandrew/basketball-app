@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -17,6 +18,10 @@ import {
   getDrillCompletions,
   getAchievements,
   setAchievements,
+  setUserProfile,
+  createBackupSnapshot,
+  restoreBackupSnapshot,
+  getBackupSnapshotInfo,
 } from "../storage/storage";
 import { UserProfile, GamificationState } from "../models/types";
 import { Achievement } from "../models/achievements";
@@ -35,6 +40,8 @@ export const ProfileScreen: React.FC = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [gamification, setGamification] = useState<GamificationState | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [autoSaveResults, setAutoSaveResults] = useState(true);
+  const [lastBackupISO, setLastBackupISO] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const { theme } = useTheme();
 
@@ -44,7 +51,7 @@ export const ProfileScreen: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [userProfile, gamState, shootingSets, practiceDays, drillCompletions, storedAchievements] =
+      const [userProfile, gamState, shootingSets, practiceDays, drillCompletions, storedAchievements, backupInfo] =
         await Promise.all([
           getUserProfile(),
           getGamificationState(),
@@ -52,10 +59,13 @@ export const ProfileScreen: React.FC = () => {
           getPracticeDays(),
           getDrillCompletions(),
           getAchievements(),
+          getBackupSnapshotInfo(),
         ]);
 
       setProfile(userProfile);
       setGamification(gamState);
+      setAutoSaveResults(userProfile?.autoSaveResults !== false);
+      setLastBackupISO(backupInfo?.createdAtISO || null);
 
       if (gamState) {
         // Check for new achievements
@@ -107,6 +117,58 @@ export const ProfileScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAutoSaveToggle = async (value: boolean) => {
+    if (!profile) return;
+    try {
+      const updatedProfile: UserProfile = { ...profile, autoSaveResults: value };
+      await setUserProfile(updatedProfile);
+      setProfile(updatedProfile);
+      setAutoSaveResults(value);
+    } catch (error) {
+      console.error("Error updating auto-save setting:", error);
+      Alert.alert("Error", "Could not update auto-save setting.");
+    }
+  };
+
+  const handleBackupNow = async () => {
+    try {
+      const snapshot = await createBackupSnapshot();
+      setLastBackupISO(snapshot.createdAtISO);
+      Alert.alert("Backup Saved", "Your results backup has been saved.");
+    } catch (error) {
+      console.error("Error creating backup:", error);
+      Alert.alert("Error", "Could not create backup.");
+    }
+  };
+
+  const handleRestoreBackup = async () => {
+    Alert.alert(
+      "Restore Backup",
+      "This will replace your current local data with the last backup. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Restore",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const restored = await restoreBackupSnapshot();
+              if (!restored) {
+                Alert.alert("No Backup Found", "There is no backup to restore.");
+                return;
+              }
+              await loadData();
+              Alert.alert("Backup Restored", "Your saved results have been restored.");
+            } catch (error) {
+              console.error("Error restoring backup:", error);
+              Alert.alert("Error", "Could not restore backup.");
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -206,6 +268,51 @@ export const ProfileScreen: React.FC = () => {
           <Text style={styles.nextLevelText}>
             Next level in {xpNeededForNextLevel > 0 ? xpNeededForNextLevel : 0} XP
           </Text>
+        </View>
+      </View>
+
+      {/* Data Safety */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="shield-checkmark" size={24} color={theme.primary} />
+          <Text style={styles.sectionTitle}>Data Safety</Text>
+        </View>
+
+        <View style={styles.settingRow}>
+          <View style={styles.settingTextWrap}>
+            <Text style={styles.settingTitle}>Auto-save Backup</Text>
+            <Text style={styles.settingDescription}>
+              Automatically save a backup snapshot when workouts are logged.
+            </Text>
+          </View>
+          <Switch
+            value={autoSaveResults}
+            onValueChange={handleAutoSaveToggle}
+            trackColor={{ false: "#444", true: theme.primary + "66" }}
+            thumbColor={autoSaveResults ? theme.primary : "#999"}
+          />
+        </View>
+
+        <Text style={styles.backupMeta}>
+          Last backup: {lastBackupISO ? new Date(lastBackupISO).toLocaleString() : "Never"}
+        </Text>
+
+        <View style={styles.backupActions}>
+          <TouchableOpacity
+            style={[styles.backupButton, { borderColor: theme.primary + "55" }]}
+            onPress={handleBackupNow}
+          >
+            <Ionicons name="cloud-upload-outline" size={16} color={theme.primary} />
+            <Text style={[styles.backupButtonText, { color: theme.primary }]}>Backup Now</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.backupButton, { borderColor: "#8E8E93" }]}
+            onPress={handleRestoreBackup}
+          >
+            <Ionicons name="refresh-circle-outline" size={16} color="#B8B8BD" />
+            <Text style={[styles.backupButtonText, { color: "#B8B8BD" }]}>Restore Backup</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -529,5 +636,50 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
     textAlign: "center",
+  },
+  settingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  settingTextWrap: {
+    flex: 1,
+  },
+  settingTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  settingDescription: {
+    fontSize: 13,
+    color: "#8E8E93",
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  backupMeta: {
+    marginTop: 12,
+    color: "#8E8E93",
+    fontSize: 13,
+  },
+  backupActions: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 10,
+  },
+  backupButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  backupButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

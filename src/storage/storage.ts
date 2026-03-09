@@ -30,7 +30,10 @@ const KEYS = {
   COSMETICS: "@bucket_tracker:cosmetics",
   ACHIEVEMENTS: "@bucket_tracker:achievements",
   DAILY_CHALLENGE_COMPLETIONS: "@bucket_tracker:daily_challenge_completions",
+  BACKUP_SNAPSHOT: "@bucket_tracker:backup_snapshot",
 } as const;
+
+const WEB_BACKUP_SNAPSHOT_KEY = "bucket_tracker_backup_snapshot_v1";
 
 // Generic storage helpers
 async function getItem<T>(key: string): Promise<T | null> {
@@ -321,6 +324,7 @@ export async function getUserProfile(): Promise<UserProfile | null> {
     const defaultProfile: UserProfile = {
       id: "user_1",
       name: "Player",
+      autoSaveResults: true,
       isSchoolDaySchedule: true,
       restDays: [],
       familyHolidaySchedule: "no_scheduled",
@@ -336,11 +340,18 @@ export async function getUserProfile(): Promise<UserProfile | null> {
   if (!profile.familyHolidayDates) {
     profile.familyHolidayDates = [];
   }
+  if (profile.autoSaveResults === undefined) {
+    profile.autoSaveResults = true;
+  }
   return profile;
 }
 
 export async function setUserProfile(profile: UserProfile): Promise<void> {
-  await setItem(KEYS.USER_PROFILE, profile);
+  const normalized: UserProfile = {
+    ...profile,
+    autoSaveResults: profile.autoSaveResults !== false,
+  };
+  await setItem(KEYS.USER_PROFILE, normalized);
 }
 
 // Gamification State
@@ -560,4 +571,123 @@ export async function setDailyChallengeCompleted(date: string): Promise<void> {
   const completed = await getDailyChallengeCompletions();
   if (completed.includes(date)) return;
   await setItem(KEYS.DAILY_CHALLENGE_COMPLETIONS, [...completed, date]);
+}
+
+interface BackupSnapshot {
+  version: 1;
+  createdAtISO: string;
+  data: {
+    shotSpots: ShotSpot[];
+    shootingSets: ShootingSet[];
+    drills: ChecklistDrill[];
+    drillCompletions: DrillCompletion[];
+    practiceDays: PracticeDay[];
+    practiceSessions: PracticeSession[];
+    userProfile: UserProfile | null;
+    gamification: GamificationState | null;
+    cosmetics: CosmeticsState | null;
+    achievements: Achievement[];
+    dailyChallengeCompletions: string[];
+  };
+}
+
+export async function createBackupSnapshot(): Promise<BackupSnapshot> {
+  const [
+    shotSpots,
+    shootingSets,
+    drills,
+    drillCompletions,
+    practiceDays,
+    practiceSessions,
+    userProfile,
+    gamification,
+    cosmetics,
+    achievements,
+    dailyChallengeCompletions,
+  ] = await Promise.all([
+    getShotSpots(),
+    getShootingSets(),
+    getDrills(),
+    getDrillCompletions(),
+    getPracticeDays(),
+    getPracticeSessions(),
+    getUserProfile(),
+    getItem<GamificationState>(KEYS.GAMIFICATION),
+    getItem<CosmeticsState>(KEYS.COSMETICS),
+    getAchievements(),
+    getDailyChallengeCompletions(),
+  ]);
+
+  const snapshot: BackupSnapshot = {
+    version: 1,
+    createdAtISO: new Date().toISOString(),
+    data: {
+      shotSpots,
+      shootingSets,
+      drills,
+      drillCompletions,
+      practiceDays,
+      practiceSessions,
+      userProfile,
+      gamification,
+      cosmetics,
+      achievements,
+      dailyChallengeCompletions,
+    },
+  };
+
+  await setItem(KEYS.BACKUP_SNAPSHOT, snapshot);
+
+  if (typeof globalThis !== "undefined" && "localStorage" in globalThis) {
+    try {
+      globalThis.localStorage.setItem(WEB_BACKUP_SNAPSHOT_KEY, JSON.stringify(snapshot));
+    } catch (error) {
+      console.warn("Unable to write backup snapshot to localStorage:", error);
+    }
+  }
+
+  return snapshot;
+}
+
+export async function getBackupSnapshotInfo(): Promise<{ createdAtISO: string } | null> {
+  const snapshot = await getItem<BackupSnapshot>(KEYS.BACKUP_SNAPSHOT);
+  if (!snapshot?.createdAtISO) return null;
+  return { createdAtISO: snapshot.createdAtISO };
+}
+
+export async function restoreBackupSnapshot(): Promise<boolean> {
+  let snapshot = await getItem<BackupSnapshot>(KEYS.BACKUP_SNAPSHOT);
+
+  if (!snapshot && typeof globalThis !== "undefined" && "localStorage" in globalThis) {
+    try {
+      const raw = globalThis.localStorage.getItem(WEB_BACKUP_SNAPSHOT_KEY);
+      snapshot = raw ? (JSON.parse(raw) as BackupSnapshot) : null;
+    } catch (error) {
+      console.warn("Unable to read backup snapshot from localStorage:", error);
+    }
+  }
+
+  if (!snapshot?.data) {
+    return false;
+  }
+
+  await Promise.all([
+    setItem(KEYS.SHOT_SPOTS, snapshot.data.shotSpots || []),
+    setItem(KEYS.SHOOTING_SETS, snapshot.data.shootingSets || []),
+    setItem(KEYS.DRILLS, snapshot.data.drills || []),
+    setItem(KEYS.DRILL_COMPLETIONS, snapshot.data.drillCompletions || []),
+    setItem(KEYS.PRACTICE_DAYS, snapshot.data.practiceDays || []),
+    setItem(KEYS.PRACTICE_SESSIONS, snapshot.data.practiceSessions || []),
+    setItem(KEYS.USER_PROFILE, snapshot.data.userProfile),
+    setItem(KEYS.GAMIFICATION, snapshot.data.gamification),
+    setItem(KEYS.COSMETICS, snapshot.data.cosmetics),
+    setItem(KEYS.ACHIEVEMENTS, snapshot.data.achievements || []),
+    setItem(
+      KEYS.DAILY_CHALLENGE_COMPLETIONS,
+      snapshot.data.dailyChallengeCompletions || []
+    ),
+    setItem(KEYS.BACKUP_SNAPSHOT, snapshot),
+  ]);
+
+  return true;
 }

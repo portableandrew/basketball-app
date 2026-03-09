@@ -74,12 +74,14 @@ export interface PracticeDay {
     makes: number;
     attempts: number;
   };
+  swishEverythingLevel?: number; // Highest level reached (0-10), optional
   trainingSessions?: TrainingSession[]; // Gym and Vertical Jump sessions
 }
 
 export interface UserProfile {
   id: string;
   name: string;
+  autoSaveResults: boolean; // Auto-create backup snapshot after save
   isSchoolDaySchedule: boolean;
   restDays: string[]; // ISO date strings
   familyHolidaySchedule: FamilyHolidaySchedule; // "no_scheduled" or "custom"

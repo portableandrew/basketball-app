@@ -110,6 +110,16 @@ const NBA_WORKOUTS: NBAWorkout[] = [
     duration: 20,
     xpReward: 20,
   },
+  {
+    id: "perimeter_6",
+    category: "perimeter",
+    title: "Swish Everything",
+    focus: "Consecutive Swish Precision",
+    description:
+      "10-level challenge in 30 minutes. Advance by hitting consecutive clean swishes from harder spots and dribble entries. Log your highest level reached.",
+    duration: 30,
+    xpReward: 30,
+  },
   // Finishing Craft
   {
     id: "finishing_1",

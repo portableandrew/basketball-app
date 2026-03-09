@@ -38,6 +38,7 @@ import {
   setAchievements,
   getDailyChallengeCompletions,
   setDailyChallengeCompleted,
+  createBackupSnapshot,
 } from "../storage/storage";
 import { ShotSpot, ChecklistDrill, TimeOfDay, PracticeSession, TrainingSession, TrainingSessionType, SessionTimeSlot, SessionType } from "../models/types";
 import { DEFAULT_SCHEDULES } from "../models/constants";
@@ -79,6 +80,7 @@ export const LogWorkoutScreen: React.FC = () => {
     makes: 0,
     attempts: 0,
   });
+  const [swishEverythingLevel, setSwishEverythingLevel] = useState<string>("");
   const [schedule, setSchedule] = useState(DEFAULT_SCHEDULES.school);
   const [dayTypeLabel, setDayTypeLabel] = useState<string>("");
   const [existingSessionIds, setExistingSessionIds] = useState<string[]>([]);
@@ -238,6 +240,11 @@ export const LogWorkoutScreen: React.FC = () => {
     } else {
       setFreeThrows({ makes: 0, attempts: 0 });
     }
+    setSwishEverythingLevel(
+      practiceDay?.swishEverythingLevel !== undefined
+        ? String(practiceDay.swishEverythingLevel)
+        : ""
+    );
 
     // Initialize drill completions from existing data for THIS time slot only
     const initialDrills: Record<string, boolean> = {};
@@ -304,12 +311,24 @@ export const LogWorkoutScreen: React.FC = () => {
     }
   };
 
+  const parseDateKeyToPickerDate = (dateKey: string): Date => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey || "");
+    if (!match) return new Date();
+    const year = Number(match[1]);
+    const monthIndex = Number(match[2]) - 1;
+    const day = Number(match[3]);
+    return new Date(year, monthIndex, day, 12, 0, 0);
+  };
+
   const handleDateChange = (event: any, date?: Date) => {
     if (Platform.OS === "android") {
       setShowDatePicker(false);
     }
-    if (date) {
-      const dateString = safeFormatDateToYYYYMMDD(date);
+    if (event?.type === "dismissed") return;
+
+    const nextDate = date || parseDateKeyToPickerDate(selectedDate);
+    if (nextDate) {
+      const dateString = safeFormatDateToYYYYMMDD(nextDate);
       setSelectedDate(dateString);
       setStep(1); // Reset to step 1 when date changes
       setSelectedTimeSlot(null);
@@ -569,6 +588,14 @@ export const LogWorkoutScreen: React.FC = () => {
         practiceDay.freeThrows = freeThrows;
       } else if (!practiceDay.freeThrows) {
         practiceDay.freeThrows = undefined;
+      }
+
+      // Save Swish Everything score (highest level reached, 0-10)
+      const parsedSwishLevel = parseInt(swishEverythingLevel, 10);
+      if (!isNaN(parsedSwishLevel)) {
+        practiceDay.swishEverythingLevel = Math.max(0, Math.min(10, parsedSwishLevel));
+      } else {
+        practiceDay.swishEverythingLevel = undefined;
       }
 
       // Save training sessions to practiceDay (aggregate across all sessions)
@@ -831,6 +858,10 @@ export const LogWorkoutScreen: React.FC = () => {
         checkRankAndLevel();
       }, 300);
 
+      if (profile?.autoSaveResults !== false) {
+        await createBackupSnapshot();
+      }
+
       const xpEarnedDisplay = totalXpWithBonus - gamState.totalXp;
       Alert.alert(
         "Workout Logged!",
@@ -877,7 +908,7 @@ export const LogWorkoutScreen: React.FC = () => {
       <Text style={styles.dayTypeLabel}>{dayTypeLabel}</Text>
       {showDatePicker && (
         <DateTimePicker
-          value={new Date(selectedDate)}
+          value={parseDateKeyToPickerDate(selectedDate)}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
           onChange={handleDateChange}
@@ -971,6 +1002,30 @@ export const LogWorkoutScreen: React.FC = () => {
           onAttemptsChange={(attempts) =>
             setFreeThrows({ ...freeThrows, attempts })
           }
+        />
+      </View>
+
+      <View style={styles.swishSection}>
+        <Text style={styles.swishTitle}>Swish Everything Score (Optional)</Text>
+        <Text style={styles.swishSubtitle}>
+          Enter your highest level reached (0-10) for the 30-minute Swish Everything workout.
+        </Text>
+        <TextInput
+          style={styles.swishInput}
+          value={swishEverythingLevel}
+          onChangeText={(text) => {
+            const cleaned = text.replace(/[^0-9]/g, "");
+            if (cleaned === "") {
+              setSwishEverythingLevel("");
+              return;
+            }
+            const clamped = Math.max(0, Math.min(10, parseInt(cleaned, 10)));
+            setSwishEverythingLevel(String(clamped));
+          }}
+          keyboardType="number-pad"
+          placeholder="Highest level (0-10)"
+          placeholderTextColor="#8E8E93"
+          maxLength={2}
         />
       </View>
     </View>
@@ -1358,6 +1413,37 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     marginBottom: 16,
     letterSpacing: -0.3,
+  },
+  swishSection: {
+    marginTop: 16,
+    backgroundColor: "#1A1A1A",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A2A2A",
+    padding: 14,
+  },
+  swishTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  swishSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    color: "#8E8E93",
+    lineHeight: 18,
+  },
+  swishInput: {
+    marginTop: 10,
+    backgroundColor: "#0A0A0A",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    color: "#FFFFFF",
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: "#2A2A2A",
+    fontWeight: "700",
   },
   navigation: {
     flexDirection: "row",
